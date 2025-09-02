@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Sensores - Raspberry Pi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            margin-top: 15px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .sensor-card {
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 45px rgba(0,0,0,0.2);
+        }
+
+        .sensor-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .sensor-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+        }
+
+        .temp-icon { background: linear-gradient(45deg, #FF6B6B, #FFE66D); }
+        .ph-icon { background: linear-gradient(45deg, #4ECDC4, #44A08D); }
+        .oxygen-icon { background: linear-gradient(45deg, #A8E6CF, #7FDBFF); }
+
+        .sensor-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .sensor-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 15px 0;
+        }
+
+        .sensor-unit {
+            font-size: 0.4em;
+            color: #666;
+            font-weight: normal;
+        }
+
+        .sensor-info {
+            display: flex;
+            justify-content: space-between;
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        /* Estilos para la sección de control */
+        .control-section {
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 30px;
+        }
+
+        .control-title {
+            font-size: 1.8em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 25px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .control-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .control-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .control-item.active {
+            border-color: #4CAF50;
+            background: #e8f5e8;
+        }
+
+        .control-item.inactive {
+            border-color: #f44336;
+            background: #ffeaea;
+        }
+
+        .control-label {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .control-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .control-button.on {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.4);
+        }
+
+        .control-button.off {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            color: white;
+            box-shadow: 0 0 20px rgba(244, 67, 54, 0.4);
+        }
+
+        .control-button:hover {
+            transform: scale(1.1);
+        }
+
+        .control-button:active {
+            transform: scale(0.95);
+        }
+
+        .control-status {
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-on {
+            color: #4CAF50;
+        }
+
+        .status-off {
+            color: #f44336;
+        }
+
+        .chart-container {
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            height: 400px;
+        }
+
+        .chart-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .success {
+            background: #4CAF50;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .control-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .sensor-value {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Dashboard de Sensores</h1>
+            <p>Monitoreo y Control en tiempo real desde Raspberry Pi</p>
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span>Conectado a Firebase</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="loadData()">🔄 Actualizar Datos</button>
+            <button class="btn" onclick="toggleAutoRefresh()">⏱️ Auto-actualización</button>
+        </div>
+
+        <div id="loading" class="loading">
+            Cargando datos de los sensores...
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="success" class="success" style="display: none;"></div>
+
+        <!-- Sección de Control Remoto -->
+        <div id="control-section" class="control-section" style="display: none;">
+            <div class="control-title">
+                🎛️ Control Remoto de Dispositivos
+            </div>
+            <div class="control-grid">
+                <div class="control-item" id="bomba1-item">
+                    <div class="control-label">Bomba 1</div>
+                    <button class="control-button off" id="bomba1-btn" onclick="toggleDevice('bomba1')">
+                        💧
+                    </button>
+                    <div class="control-status status-off" id="bomba1-status">APAGADA</div>
+                </div>
+
+                <div class="control-item" id="bomba2-item">
+                    <div class="control-label">Bomba 2</div>
+                    <button class="control-button off" id="bomba2-btn" onclick="toggleDevice('bomba2')">
+                        💧
+                    </button>
+                    <div class="control-status status-off" id="bomba2-status">APAGADA</div>
+                </div>
+
+                <div class="control-item" id="electrovalvula1-item">
+                    <div class="control-label">Electroválvula 1</div>
+                    <button class="control-button off" id="electrovalvula1-btn" onclick="toggleDevice('electrovalvula1')">
+                        🔧
+                    </button>
+                    <div class="control-status status-off" id="electrovalvula1-status">CERRADA</div>
+                </div>
+
+                <div class="control-item" id="electrovalvula2-item">
+                    <div class="control-label">Electroválvula 2</div>
+                    <button class="control-button off" id="electrovalvula2-btn" onclick="toggleDevice('electrovalvula2')">
+                        🔧
+                    </button>
+                    <div class="control-status status-off" id="electrovalvula2-status">CERRADA</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboard" class="dashboard" style="display: none;">
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <div class="sensor-icon temp-icon">🌡️</div>
+                    <div class="sensor-title">Sensor de Temperatura</div>
+                </div>
+                <div class="sensor-value" id="temp-value">
+                    -- <span class="sensor-unit">°C</span>
+                </div>
+                <div class="sensor-info">
+                    <span>Última actualización:</span>
+                    <span id="temp-time">--</span>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <div class="sensor-icon ph-icon">🧪</div>
+                    <div class="sensor-title">Sensor de pH</div>
+                </div>
+                <div class="sensor-value" id="ph-value">
+                    -- <span class="sensor-unit">pH</span>
+                </div>
+                <div class="sensor-info">
+                    <span>Última actualización:</span>
+                    <span id="ph-time">--</span>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <div class="sensor-icon oxygen-icon">💨</div>
+                    <div class="sensor-title">Oxígeno Disuelto</div>
+                </div>
+                <div class="sensor-value" id="oxygen-value">
+                    -- <span class="sensor-unit">mg/L</span>
+                </div>
+                <div class="sensor-info">
+                    <span>Última actualización:</span>
+                    <span id="oxygen-time">--</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="charts-section" style="display: none;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="color: white; margin-bottom: 20px;">📈 Gráficos de Sensores</h2>
+                <button class="btn" onclick="changeChartPeriod('last10')" id="btn-last10">Últimas 10</button>
+                <button class="btn" onclick="changeChartPeriod('last20')" id="btn-last20">Últimas 20</button>
+                <button class="btn" onclick="changeChartPeriod('today')" id="btn-today">Hoy</button>
+            </div>
+
+            <!-- Gráfico de Temperatura -->
+            <div class="chart-container">
+                <div class="chart-title">🌡️ Temperatura</div>
+                <canvas id="tempChart" width="400" height="300"></canvas>
+            </div>
+
+            <!-- Gráfico de pH -->
+            <div class="chart-container">
+                <div class="chart-title">🧪 pH</div>
+                <canvas id="phChart" width="400" height="300"></canvas>
+            </div>
+
+            <!-- Gráfico de Oxígeno -->
+            <div class="chart-container">
+                <div class="chart-title">💨 Oxígeno Disuelto</div>
+                <canvas id="oxygenChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+
+    <script>
+        // CONFIGURACIÓN DE FIREBASE - REEMPLAZA CON TUS DATOS
+        const firebaseConfig = {
+            apiKey: "AIzaSyCfi_ltG3pDIL1MciH6njvfEhvGHQymR04",
+            authDomain: "sensores-hanna.firebaseapp.com",
+            projectId: "sensores-hanna",
+            storageBucket: "sensores-hanna.firebasestorage.app",
+            messagingSenderId: "258000313740",
+            appId: "1:258000313740:web:069e15f088ae1eac6f8aa9",
+            measurementId: "G-694Q78RLJL"
+        };
+
+        // Inicializar Firebase
+        let db;
+        let autoRefreshInterval;
+        let isAutoRefreshEnabled = false;
+        let tempChart, phChart, oxygenChart;
+        let currentChartPeriod = 'last10';
+
+        // Estado de los dispositivos
+        let deviceStates = {
+            bomba1: false,
+            bomba2: false,
+            electrovalvula1: false,
+            electrovalvula2: false
+        };
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log("Firebase inicializado correctamente");
+            loadData();
+            initializeControlStates();
+            setupControlListeners();
+        } catch (error) {
+            console.error("Error al inicializar Firebase:", error);
+            showError("Error de configuración de Firebase. Verifica tu configuración.");
+        }
+
+        async function loadData() {
+            try {
+                showLoading(true);
+                
+                // Cargar datos de cada sensor
+                const [tempData, phData, oxygenData] = await Promise.all([
+                    getLatestSensorData('Sensor de temperatura'),
+                    getLatestSensorData('Sensor de ph'),
+                    getLatestSensorData('Sensor de oxigeno disuelto')
+                ]);
+
+                // Actualizar la interfaz
+                updateSensorDisplay('temp', tempData, '°C');
+                updateSensorDisplay('ph', phData, 'pH');
+                updateSensorDisplay('oxygen', oxygenData, 'mg/L');
+
+                showLoading(false);
+                document.getElementById('dashboard').style.display = 'grid';
+                document.getElementById('charts-section').style.display = 'block';
+                document.getElementById('control-section').style.display = 'block';
+
+                // Cargar y mostrar gráficos
+                await loadAllCharts();
+
+            } catch (error) {
+                console.error("Error cargando datos:", error);
+                showError("Error al cargar los datos. Verifica tu conexión.");
+                showLoading(false);
+            }
+        }
+
+        // Inicializar estados de control en Firebase
+        async function initializeControlStates() {
+            try {
+                const controlRef = db.collection('control_dispositivos');
+                
+                // Verificar si ya existen los documentos, si no, crearlos
+                const devices = ['bomba1', 'bomba2', 'electrovalvula1', 'electrovalvula2'];
+                
+                for (const device of devices) {
+                    const docRef = controlRef.doc(device);
+                    const doc = await docRef.get();
+                    
+                    if (!doc.exists) {
+                        await docRef.set({
+                            estado: false,
+                            ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp(),
+                            dispositivo: device
+                        });
+                        console.log(`Inicializado ${device} en Firebase`);
+                    } else {
+                        // Cargar el estado actual
+                        deviceStates[device] = doc.data().estado;
+                        updateDeviceUI(device, deviceStates[device]);
+                    }
+                }
+                
+                console.log("Estados de control inicializados");
+            } catch (error) {
+                console.error("Error inicializando estados de control:", error);
+                showError("Error al inicializar controles remotos.");
+            }
+        }
+
+        // Configurar listeners para cambios en tiempo real
+        function setupControlListeners() {
+            const devices = ['bomba1', 'bomba2', 'electrovalvula1', 'electrovalvula2'];
+            
+            devices.forEach(device => {
+                db.collection('control_dispositivos').doc(device)
+                    .onSnapshot((doc) => {
+                        if (doc.exists) {
+                            const data = doc.data();
+                            deviceStates[device] = data.estado;
+                            updateDeviceUI(device, data.estado);
+                        }
+                    }, (error) => {
+                        console.error(`Error listening to ${device}:`, error);
+                    });
+            });
+        }
+
+        // Función para alternar el estado de un dispositivo
+        async function toggleDevice(deviceName) {
+            try {
+                const newState = !deviceStates[deviceName];
+                
+                // Actualizar en Firebase
+                await db.collection('control_dispositivos').doc(deviceName).update({
+                    estado: newState,
+                    ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Actualizar estado local
+                deviceStates[deviceName] = newState;
+                
+                // Mostrar mensaje de éxito
+                showSuccess(`${getDeviceDisplayName(deviceName)} ${newState ? 'activada' : 'desactivada'} correctamente`);
+                
+                console.log(`${deviceName} ${newState ? 'activado' : 'desactivado'}`);
+                
+            } catch (error) {
+                console.error(`Error al controlar ${deviceName}:`, error);
+                showError(`Error al controlar ${getDeviceDisplayName(deviceName)}`);
+            }
+        }
+
+        // Actualizar la interfaz de usuario del dispositivo
+        function updateDeviceUI(deviceName, isOn) {
+            const button = document.getElementById(`${deviceName}-btn`);
+            const status = document.getElementById(`${deviceName}-status`);
+            const item = document.getElementById(`${deviceName}-item`);
+            
+            if (button && status && item) {
+                if (isOn) {
+                    button.className = 'control-button on';
+                    status.className = 'control-status status-on';
+                    item.className = 'control-item active';
+                    
+                    if (deviceName.includes('bomba')) {
+                        status.textContent = 'ENCENDIDA';
+                    } else {
+                        status.textContent = 'ABIERTA';
+                    }
+                } else {
+                    button.className = 'control-button off';
+                    status.className = 'control-status status-off';
+                    item.className = 'control-item inactive';
+                    
+                    if (deviceName.includes('bomba')) {
+                        status.textContent = 'APAGADA';
+                    } else {
+                        status.textContent = 'CERRADA';
+                    }
+                }
+            }
+        }
+
+        // Obtener nombre para mostrar del dispositivo
+        function getDeviceDisplayName(deviceName) {
+            const names = {
+                'bomba1': 'Bomba 1',
+                'bomba2': 'Bomba 2',
+                'electrovalvula1': 'Electroválvula 1',
+                'electrovalvula2': 'Electroválvula 2'
+            };
+            return names[deviceName] || deviceName;
+        }
+
+        async function getLatestSensorData(collectionName) {
+            try {
+                const snapshot = await db.collection(collectionName)
+                    .orderBy('fecha_hora', 'desc')
+                    .limit(1)
+                    .get();
+
+                if (snapshot.empty) {
+                    return { valor: null, fecha_hora: null };
+                }
+
+                const doc = snapshot.docs[0];
+                return doc.data();
+            } catch (error) {
+                console.error(`Error obteniendo datos de ${collectionName}:`, error);
+                return { valor: null, fecha_hora: null };
+            }
+        }
+
+        function updateSensorDisplay(sensorType, data, unit) {
+            const valueElement = document.getElementById(`${sensorType}-value`);
+            const timeElement = document.getElementById(`${sensorType}-time`);
+
+            if (data.valor !== null) {
+                valueElement.innerHTML = `${data.valor} <span class="sensor-unit">${unit}</span>`;
+                
+                if (data.fecha_hora) {
+                    const date = data.fecha_hora.toDate ? data.fecha_hora.toDate() : new Date(data.fecha_hora);
+                    timeElement.textContent = formatDate(date);
+                } else {
+                    timeElement.textContent = 'Fecha no disponible';
+                }
+            } else {
+                valueElement.innerHTML = `-- <span class="sensor-unit">${unit}</span>`;
+                timeElement.textContent = 'Sin datos';
+            }
+        }
+
+        function formatDate(date) {
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+
+            if (diffMins < 1) return 'Hace menos de 1 minuto';
+            if (diffMins < 60) return `Hace ${diffMins} minutos`;
+            
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `Hace ${diffHours} horas`;
+            
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+
+        function toggleAutoRefresh() {
+            if (isAutoRefreshEnabled) {
+                clearInterval(autoRefreshInterval);
+                isAutoRefreshEnabled = false;
+                console.log("Auto-actualización desactivada");
+            } else {
+                autoRefreshInterval = setInterval(loadData, 30000); // Cada 30 segundos
+                isAutoRefreshEnabled = true;
+                console.log("Auto-actualización activada");
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const errorElement = document.getElementById('error');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+            setTimeout(() => {
+                errorElement.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successElement = document.getElementById('success');
+            successElement.textContent = message;
+            successElement.style.display = 'block';
+            setTimeout(() => {
+                successElement.style.display = 'none';
+            }, 3000);
+        }
+
+        // Configurar listeners para actualizaciones en tiempo real (opcional)
+        function setupRealtimeListeners() {
+            const collections = ['Sensor de temperatura', 'Sensor de ph', 'Sensor de oxigeno disuelto'];
+            
+            collections.forEach(collection => {
+                db.collection(collection)
+                    .orderBy('fecha_hora', 'desc')
+                    .limit(1)
+                    .onSnapshot((snapshot) => {
+                        if (!snapshot.empty) {
+                            loadData(); // Recargar datos cuando hay cambios
+                        }
+                    });
+            });
+        }
+
+        // Activar listeners en tiempo real después de cargar los datos iniciales
+        setTimeout(setupRealtimeListeners, 2000);
+
+        // Funciones para los gráficos individuales
+        async function loadAllCharts() {
+            try {
+                const [tempData, phData, oxygenData] = await Promise.all([
+                    getHistoricalData('Sensor de temperatura'),
+                    getHistoricalData('Sensor de ph'),
+                    getHistoricalData('Sensor de oxigeno disuelto')
+                ]);
+
+                createTemperatureChart(tempData);
+                createPhChart(phData);
+                createOxygenChart(oxygenData);
+            } catch (error) {
+                console.error("Error cargando gráficos:", error);
+            }
+        }
+
+        async function getHistoricalData(collectionName) {
+            try {
+                let limit;
+                switch (currentChartPeriod) {
+                    case 'last10': limit = 10; break;
+                    case 'last20': limit = 20; break;
+                    case 'today': limit = 50; break;
+                    default: limit = 10;
+                }
+
+                let query = db.collection(collectionName)
+                    .orderBy('fecha_hora', 'desc')
+                    .limit(limit);
+
+                if (currentChartPeriod === 'today') {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    query = db.collection(collectionName)
+                        .where('fecha_hora', '>=', today)
+                        .orderBy('fecha_hora', 'desc')
+                        .limit(50);
+                }
+
+                const snapshot = await query.get();
+                const data = [];
+
+                snapshot.forEach(doc => {
+                    const docData = doc.data();
+                    if (docData.valor !== null && docData.fecha_hora) {
+                        data.push({
+                            valor: docData.valor,
+                            fecha_hora: docData.fecha_hora.toDate ? docData.fecha_hora.toDate() : new Date(docData.fecha_hora)
+                        });
+                    }
+                });
+
+                return data.reverse(); // Ordenar cronológicamente
+            } catch (error) {
+                console.error(`Error obteniendo datos de ${collectionName}:`, error);
+                return [];
+            }
+        }
+
+        function createTemperatureChart(data) {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            
+            if (tempChart) {
+                tempChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: values,
+                        borderColor: '#FF6B6B',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#FF6B6B',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createPhChart(data) {
+            const ctx = document.getElementById('phChart').getContext('2d');
+            
+            if (phChart) {
+                phChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            phChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'pH',
+                        data: values,
+                        borderColor: '#4ECDC4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#4ECDC4',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 14,
+                            title: {
+                                display: true,
+                                text: 'pH'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createOxygenChart(data) {
+            const ctx = document.getElementById('oxygenChart').getContext('2d');
+            
+            if (oxygenChart) {
+                oxygenChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            oxygenChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Oxígeno Disuelto (mg/L)',
+                        data: values,
+                        borderColor: '#A8E6CF',
+                        backgroundColor: 'rgba(168, 230, 207, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#A8E6CF',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Oxígeno Disuelto (mg/L)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function changeChartPeriod(period) {
+            currentChartPeriod = period;
+            
+            // Actualizar botones activos
+            document.querySelectorAll('[id^="btn-"]').forEach(btn => {
+                btn.style.opacity = '0.7';
+            });
+            document.getElementById(`btn-${period}`).style.opacity = '1';
+            
+            // Recargar todos los gráficos
+            await loadAllCharts();
+        }
+    </script>
+</body>
+</html>

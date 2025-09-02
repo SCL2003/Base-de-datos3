@@ -539,7 +539,7 @@
             }
         }
 
-        // Inicializar estados de control en Firebase
+        // Inicializar estados de control en Firebase - VERSIÓN CORREGIDA
         async function initializeControlStates() {
             try {
                 const controlRef = db.collection('control_dispositivos');
@@ -548,27 +548,53 @@
                 const devices = ['bomba1', 'bomba2', 'electrovalvula1', 'electrovalvula2'];
                 
                 for (const device of devices) {
-                    const docRef = controlRef.doc(device);
-                    const doc = await docRef.get();
-                    
-                    if (!doc.exists) {
-                        await docRef.set({
-                            estado: false,
-                            ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp(),
-                            dispositivo: device
-                        });
-                        console.log(`Inicializado ${device} en Firebase`);
-                    } else {
-                        // Cargar el estado actual
-                        deviceStates[device] = doc.data().estado;
-                        updateDeviceUI(device, deviceStates[device]);
+                    try {
+                        const docRef = controlRef.doc(device);
+                        const doc = await docRef.get();
+                        
+                        if (!doc.exists) {
+                            // Crear documento si no existe
+                            await docRef.set({
+                                estado: false,
+                                ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp(),
+                                dispositivo: device
+                            });
+                            console.log(`Inicializado ${device} en Firebase`);
+                            
+                            // Actualizar estado local y UI
+                            deviceStates[device] = false;
+                            updateDeviceUI(device, false);
+                        } else {
+                            // Cargar el estado actual del documento existente
+                            const data = doc.data();
+                            const currentState = data.estado || false;
+                            
+                            // Actualizar estado local
+                            deviceStates[device] = currentState;
+                            
+                            // Actualizar la interfaz de usuario
+                            updateDeviceUI(device, currentState);
+                            
+                            console.log(`Estado de ${device} cargado: ${currentState}`);
+                        }
+                    } catch (deviceError) {
+                        console.error(`Error procesando ${device}:`, deviceError);
+                        // Si hay error con un dispositivo específico, continuar con los demás
+                        deviceStates[device] = false;
+                        updateDeviceUI(device, false);
                     }
                 }
                 
-                console.log("Estados de control inicializados");
+                console.log("Estados de control inicializados correctamente:", deviceStates);
             } catch (error) {
                 console.error("Error inicializando estados de control:", error);
                 showError("Error al inicializar controles remotos.");
+                
+                // En caso de error general, asegurar que la UI esté en estado por defecto
+                Object.keys(deviceStates).forEach(device => {
+                    deviceStates[device] = false;
+                    updateDeviceUI(device, false);
+                });
             }
         }
 
@@ -581,8 +607,14 @@
                     .onSnapshot((doc) => {
                         if (doc.exists) {
                             const data = doc.data();
-                            deviceStates[device] = data.estado;
-                            updateDeviceUI(device, data.estado);
+                            const newState = data.estado || false;
+                            
+                            // Solo actualizar si el estado cambió
+                            if (deviceStates[device] !== newState) {
+                                deviceStates[device] = newState;
+                                updateDeviceUI(device, newState);
+                                console.log(`Estado de ${device} actualizado por listener: ${newState}`);
+                            }
                         }
                     }, (error) => {
                         console.error(`Error listening to ${device}:`, error);
@@ -595,19 +627,21 @@
             try {
                 const newState = !deviceStates[deviceName];
                 
+                // Mostrar feedback inmediato (opcional)
+                console.log(`Cambiando ${deviceName} a ${newState}`);
+                
                 // Actualizar en Firebase
                 await db.collection('control_dispositivos').doc(deviceName).update({
                     estado: newState,
                     ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                // Actualizar estado local
-                deviceStates[deviceName] = newState;
+                // El estado local se actualizará automáticamente por el listener
                 
                 // Mostrar mensaje de éxito
                 showSuccess(`${getDeviceDisplayName(deviceName)} ${newState ? 'activada' : 'desactivada'} correctamente`);
                 
-                console.log(`${deviceName} ${newState ? 'activado' : 'desactivado'}`);
+                console.log(`${deviceName} ${newState ? 'activado' : 'desactivado'} en Firebase`);
                 
             } catch (error) {
                 console.error(`Error al controlar ${deviceName}:`, error);
@@ -615,17 +649,22 @@
             }
         }
 
-        // Actualizar la interfaz de usuario del dispositivo
+        // Actualizar la interfaz de usuario del dispositivo - VERSIÓN MEJORADA
         function updateDeviceUI(deviceName, isOn) {
             const button = document.getElementById(`${deviceName}-btn`);
             const status = document.getElementById(`${deviceName}-status`);
             const item = document.getElementById(`${deviceName}-item`);
             
             if (button && status && item) {
+                // Remover todas las clases previas
+                button.classList.remove('on', 'off');
+                status.classList.remove('status-on', 'status-off');
+                item.classList.remove('active', 'inactive');
+                
                 if (isOn) {
-                    button.className = 'control-button on';
-                    status.className = 'control-status status-on';
-                    item.className = 'control-item active';
+                    button.classList.add('on');
+                    status.classList.add('status-on');
+                    item.classList.add('active');
                     
                     if (deviceName.includes('bomba')) {
                         status.textContent = 'ENCENDIDA';
@@ -633,9 +672,9 @@
                         status.textContent = 'ABIERTA';
                     }
                 } else {
-                    button.className = 'control-button off';
-                    status.className = 'control-status status-off';
-                    item.className = 'control-item inactive';
+                    button.classList.add('off');
+                    status.classList.add('status-off');
+                    item.classList.add('inactive');
                     
                     if (deviceName.includes('bomba')) {
                         status.textContent = 'APAGADA';
@@ -643,6 +682,10 @@
                         status.textContent = 'CERRADA';
                     }
                 }
+                
+                console.log(`UI actualizada para ${deviceName}: ${isOn ? 'ON' : 'OFF'}`);
+            } else {
+                console.error(`No se encontraron elementos UI para ${deviceName}`);
             }
         }
 

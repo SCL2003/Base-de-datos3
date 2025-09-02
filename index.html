@@ -553,7 +553,7 @@
                         const doc = await docRef.get();
                         
                         if (!doc.exists) {
-                            // Crear documento si no existe
+                            // Crear documento si no existe usando .set()
                             await docRef.set({
                                 estado: false,
                                 ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp(),
@@ -579,16 +579,29 @@
                         }
                     } catch (deviceError) {
                         console.error(`Error procesando ${device}:`, deviceError);
-                        // Si hay error con un dispositivo específico, continuar con los demás
-                        deviceStates[device] = false;
-                        updateDeviceUI(device, false);
+                        
+                        // Si hay error, intentar crear el documento con .set()
+                        try {
+                            await controlRef.doc(device).set({
+                                estado: false,
+                                ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp(),
+                                dispositivo: device
+                            });
+                            deviceStates[device] = false;
+                            updateDeviceUI(device, false);
+                            console.log(`${device} creado después de error`);
+                        } catch (createError) {
+                            console.error(`No se pudo crear ${device}:`, createError);
+                            deviceStates[device] = false;
+                            updateDeviceUI(device, false);
+                        }
                     }
                 }
                 
                 console.log("Estados de control inicializados correctamente:", deviceStates);
             } catch (error) {
                 console.error("Error inicializando estados de control:", error);
-                showError("Error al inicializar controles remotos.");
+                showError("Error al inicializar controles remotos: " + error.message);
                 
                 // En caso de error general, asegurar que la UI esté en estado por defecto
                 Object.keys(deviceStates).forEach(device => {

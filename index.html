@@ -107,6 +107,7 @@
         .temp-icon { background: linear-gradient(45deg, #FF6B6B, #FFE66D); }
         .ph-icon { background: linear-gradient(45deg, #4ECDC4, #44A08D); }
         .oxygen-icon { background: linear-gradient(45deg, #A8E6CF, #7FDBFF); }
+        .amonio-icon { background: linear-gradient(45deg, #FFA500, #FF6347); }
 
         .sensor-title {
             font-size: 1.3em;
@@ -433,6 +434,20 @@
                     <span id="oxygen-time">--</span>
                 </div>
             </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <div class="sensor-icon amonio-icon">⚗️</div>
+                    <div class="sensor-title">Sensor de Amonio</div>
+                </div>
+                <div class="sensor-value" id="amonio-value">
+                    -- <span class="sensor-unit">mg/L</span>
+                </div>
+                <div class="sensor-info">
+                    <span>Última actualización:</span>
+                    <span id="amonio-time">--</span>
+                </div>
+            </div>
         </div>
 
         <div id="charts-section" style="display: none;">
@@ -460,6 +475,12 @@
                 <div class="chart-title">💨 Oxígeno Disuelto</div>
                 <canvas id="oxygenChart" width="400" height="300"></canvas>
             </div>
+
+            <!-- Gráfico de Amonio -->
+            <div class="chart-container">
+                <div class="chart-title">⚗️ Amonio</div>
+                <canvas id="amonioChart" width="400" height="300"></canvas>
+            </div>
         </div>
     </div>
 
@@ -485,7 +506,7 @@
         let db;
         let autoRefreshInterval;
         let isAutoRefreshEnabled = false;
-        let tempChart, phChart, oxygenChart;
+        let tempChart, phChart, oxygenChart, amonioChart;
         let currentChartPeriod = 'last10';
 
         // Estado de los dispositivos
@@ -512,17 +533,19 @@
             try {
                 showLoading(true);
                 
-                // Cargar datos de cada sensor
-                const [tempData, phData, oxygenData] = await Promise.all([
+                // Cargar datos de cada sensor (incluyendo amonio)
+                const [tempData, phData, oxygenData, amonioData] = await Promise.all([
                     getLatestSensorData('Sensor de temperatura'),
                     getLatestSensorData('Sensor de ph'),
-                    getLatestSensorData('Sensor de oxigeno disuelto')
+                    getLatestSensorData('Sensor de oxigeno disuelto'),
+                    getLatestSensorData('Sensor de amonio')
                 ]);
 
                 // Actualizar la interfaz
                 updateSensorDisplay('temp', tempData, '°C');
                 updateSensorDisplay('ph', phData, 'pH');
                 updateSensorDisplay('oxygen', oxygenData, 'mg/L');
+                updateSensorDisplay('amonio', amonioData, 'mg/L');
 
                 showLoading(false);
                 document.getElementById('dashboard').style.display = 'grid';
@@ -539,12 +562,11 @@
             }
         }
 
-        // Inicializar estados de control en Firebase - VERSIÓN CORREGIDA
+        // Inicializar estados de control en Firebase
         async function initializeControlStates() {
             try {
                 const controlRef = db.collection('control_dispositivos');
                 
-                // Verificar si ya existen los documentos, si no, crearlos
                 const devices = ['bomba1', 'bomba2', 'electrovalvula1', 'electrovalvula2'];
                 
                 for (const device of devices) {
@@ -553,7 +575,6 @@
                         const doc = await docRef.get();
                         
                         if (!doc.exists) {
-                            // Crear documento si no existe usando .set()
                             await docRef.set({
                                 estado: false,
                                 ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp(),
@@ -561,18 +582,13 @@
                             });
                             console.log(`Inicializado ${device} en Firebase`);
                             
-                            // Actualizar estado local y UI
                             deviceStates[device] = false;
                             updateDeviceUI(device, false);
                         } else {
-                            // Cargar el estado actual del documento existente
                             const data = doc.data();
                             const currentState = data.estado || false;
                             
-                            // Actualizar estado local
                             deviceStates[device] = currentState;
-                            
-                            // Actualizar la interfaz de usuario
                             updateDeviceUI(device, currentState);
                             
                             console.log(`Estado de ${device} cargado: ${currentState}`);
@@ -580,7 +596,6 @@
                     } catch (deviceError) {
                         console.error(`Error procesando ${device}:`, deviceError);
                         
-                        // Si hay error, intentar crear el documento con .set()
                         try {
                             await controlRef.doc(device).set({
                                 estado: false,
@@ -603,7 +618,6 @@
                 console.error("Error inicializando estados de control:", error);
                 showError("Error al inicializar controles remotos: " + error.message);
                 
-                // En caso de error general, asegurar que la UI esté en estado por defecto
                 Object.keys(deviceStates).forEach(device => {
                     deviceStates[device] = false;
                     updateDeviceUI(device, false);
@@ -622,7 +636,6 @@
                             const data = doc.data();
                             const newState = data.estado || false;
                             
-                            // Solo actualizar si el estado cambió
                             if (deviceStates[device] !== newState) {
                                 deviceStates[device] = newState;
                                 updateDeviceUI(device, newState);
@@ -640,18 +653,13 @@
             try {
                 const newState = !deviceStates[deviceName];
                 
-                // Mostrar feedback inmediato (opcional)
                 console.log(`Cambiando ${deviceName} a ${newState}`);
                 
-                // Actualizar en Firebase
                 await db.collection('control_dispositivos').doc(deviceName).update({
                     estado: newState,
                     ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp()
                 });
-
-                // El estado local se actualizará automáticamente por el listener
                 
-                // Mostrar mensaje de éxito
                 showSuccess(`${getDeviceDisplayName(deviceName)} ${newState ? 'activada' : 'desactivada'} correctamente`);
                 
                 console.log(`${deviceName} ${newState ? 'activado' : 'desactivado'} en Firebase`);
@@ -662,14 +670,13 @@
             }
         }
 
-        // Actualizar la interfaz de usuario del dispositivo - VERSIÓN MEJORADA
+        // Actualizar la interfaz de usuario del dispositivo
         function updateDeviceUI(deviceName, isOn) {
             const button = document.getElementById(`${deviceName}-btn`);
             const status = document.getElementById(`${deviceName}-status`);
             const item = document.getElementById(`${deviceName}-item`);
             
             if (button && status && item) {
-                // Remover todas las clases previas
                 button.classList.remove('on', 'off');
                 status.classList.remove('status-on', 'status-off');
                 item.classList.remove('active', 'inactive');
@@ -771,7 +778,7 @@
                 isAutoRefreshEnabled = false;
                 console.log("Auto-actualización desactivada");
             } else {
-                autoRefreshInterval = setInterval(loadData, 30000); // Cada 30 segundos
+                autoRefreshInterval = setInterval(loadData, 30000);
                 isAutoRefreshEnabled = true;
                 console.log("Auto-actualización activada");
             }
@@ -799,9 +806,9 @@
             }, 3000);
         }
 
-        // Configurar listeners para actualizaciones en tiempo real (opcional)
+        // Configurar listeners para actualizaciones en tiempo real
         function setupRealtimeListeners() {
-            const collections = ['Sensor de temperatura', 'Sensor de ph', 'Sensor de oxigeno disuelto'];
+            const collections = ['Sensor de temperatura', 'Sensor de ph', 'Sensor de oxigeno disuelto', 'Sensor de amonio'];
             
             collections.forEach(collection => {
                 db.collection(collection)
@@ -809,292 +816,16 @@
                     .limit(1)
                     .onSnapshot((snapshot) => {
                         if (!snapshot.empty) {
-                            loadData(); // Recargar datos cuando hay cambios
+                            loadData();
                         }
                     });
             });
         }
 
-        // Activar listeners en tiempo real después de cargar los datos iniciales
         setTimeout(setupRealtimeListeners, 2000);
 
         // Funciones para los gráficos individuales
         async function loadAllCharts() {
             try {
-                const [tempData, phData, oxygenData] = await Promise.all([
-                    getHistoricalData('Sensor de temperatura'),
-                    getHistoricalData('Sensor de ph'),
-                    getHistoricalData('Sensor de oxigeno disuelto')
-                ]);
-
-                createTemperatureChart(tempData);
-                createPhChart(phData);
-                createOxygenChart(oxygenData);
-            } catch (error) {
-                console.error("Error cargando gráficos:", error);
-            }
-        }
-
-        async function getHistoricalData(collectionName) {
-            try {
-                let limit;
-                switch (currentChartPeriod) {
-                    case 'last10': limit = 10; break;
-                    case 'last20': limit = 20; break;
-                    case 'today': limit = 50; break;
-                    default: limit = 10;
-                }
-
-                let query = db.collection(collectionName)
-                    .orderBy('fecha_hora', 'desc')
-                    .limit(limit);
-
-                if (currentChartPeriod === 'today') {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    query = db.collection(collectionName)
-                        .where('fecha_hora', '>=', today)
-                        .orderBy('fecha_hora', 'desc')
-                        .limit(50);
-                }
-
-                const snapshot = await query.get();
-                const data = [];
-
-                snapshot.forEach(doc => {
-                    const docData = doc.data();
-                    if (docData.valor !== null && docData.fecha_hora) {
-                        data.push({
-                            valor: docData.valor,
-                            fecha_hora: docData.fecha_hora.toDate ? docData.fecha_hora.toDate() : new Date(docData.fecha_hora)
-                        });
-                    }
-                });
-
-                return data.reverse(); // Ordenar cronológicamente
-            } catch (error) {
-                console.error(`Error obteniendo datos de ${collectionName}:`, error);
-                return [];
-            }
-        }
-
-        function createTemperatureChart(data) {
-            const ctx = document.getElementById('tempChart').getContext('2d');
-            
-            if (tempChart) {
-                tempChart.destroy();
-            }
-
-            const labels = data.map(item => {
-                const date = item.fecha_hora;
-                return currentChartPeriod === 'today' 
-                    ? date.toLocaleTimeString().slice(0, 5)
-                    : date.toLocaleTimeString();
-            });
-
-            const values = data.map(item => item.valor);
-
-            tempChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Temperatura (°C)',
-                        data: values,
-                        borderColor: '#FF6B6B',
-                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                        tension: 0.4,
-                        pointRadius: 5,
-                        pointHoverRadius: 8,
-                        pointBackgroundColor: '#FF6B6B',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'Temperatura (°C)'
-                            },
-                            grid: {
-                                color: 'rgba(0,0,0,0.1)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Tiempo'
-                            },
-                            ticks: {
-                                maxTicksLimit: 8
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        function createPhChart(data) {
-            const ctx = document.getElementById('phChart').getContext('2d');
-            
-            if (phChart) {
-                phChart.destroy();
-            }
-
-            const labels = data.map(item => {
-                const date = item.fecha_hora;
-                return currentChartPeriod === 'today' 
-                    ? date.toLocaleTimeString().slice(0, 5)
-                    : date.toLocaleTimeString();
-            });
-
-            const values = data.map(item => item.valor);
-
-            phChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'pH',
-                        data: values,
-                        borderColor: '#4ECDC4',
-                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
-                        tension: 0.4,
-                        pointRadius: 5,
-                        pointHoverRadius: 8,
-                        pointBackgroundColor: '#4ECDC4',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    },
-                    scales: {
-                        y: {
-                            min: 0,
-                            max: 14,
-                            title: {
-                                display: true,
-                                text: 'pH'
-                            },
-                            grid: {
-                                color: 'rgba(0,0,0,0.1)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Tiempo'
-                            },
-                            ticks: {
-                                maxTicksLimit: 8
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        function createOxygenChart(data) {
-            const ctx = document.getElementById('oxygenChart').getContext('2d');
-            
-            if (oxygenChart) {
-                oxygenChart.destroy();
-            }
-
-            const labels = data.map(item => {
-                const date = item.fecha_hora;
-                return currentChartPeriod === 'today' 
-                    ? date.toLocaleTimeString().slice(0, 5)
-                    : date.toLocaleTimeString();
-            });
-
-            const values = data.map(item => item.valor);
-
-            oxygenChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Oxígeno Disuelto (mg/L)',
-                        data: values,
-                        borderColor: '#A8E6CF',
-                        backgroundColor: 'rgba(168, 230, 207, 0.1)',
-                        tension: 0.4,
-                        pointRadius: 5,
-                        pointHoverRadius: 8,
-                        pointBackgroundColor: '#A8E6CF',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Oxígeno Disuelto (mg/L)'
-                            },
-                            grid: {
-                                color: 'rgba(0,0,0,0.1)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Tiempo'
-                            },
-                            ticks: {
-                                maxTicksLimit: 8
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        async function changeChartPeriod(period) {
-            currentChartPeriod = period;
-            
-            // Actualizar botones activos
-            document.querySelectorAll('[id^="btn-"]').forEach(btn => {
-                btn.style.opacity = '0.7';
-            });
-            document.getElementById(`btn-${period}`).style.opacity = '1';
-            
-            // Recargar todos los gráficos
-            await loadAllCharts();
-        }
-    </script>
-</body>
-</html>
+                const [tempData, phData, oxygenData, amonioData] = await Promise.all([
+                    getHistoricalData('

@@ -828,4 +828,347 @@
         async function loadAllCharts() {
             try {
                 const [tempData, phData, oxygenData, amonioData] = await Promise.all([
-                    getHistoricalData('
+                    getHistoricalData('Sensor de temperatura'),
+                    getHistoricalData('Sensor de ph'),
+                    getHistoricalData('Sensor de oxigeno disuelto'),
+                    getHistoricalData('Sensor de amonio')
+                ]);
+
+                createTemperatureChart(tempData);
+                createPhChart(phData);
+                createOxygenChart(oxygenData);
+                createAmonioChart(amonioData);
+            } catch (error) {
+                console.error("Error cargando gráficos:", error);
+            }
+        }
+
+        async function getHistoricalData(collectionName) {
+            try {
+                let limit;
+                switch (currentChartPeriod) {
+                    case 'last10': limit = 10; break;
+                    case 'last20': limit = 20; break;
+                    case 'today': limit = 50; break;
+                    default: limit = 10;
+                }
+
+                let query = db.collection(collectionName)
+                    .orderBy('fecha_hora', 'desc')
+                    .limit(limit);
+
+                if (currentChartPeriod === 'today') {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    query = db.collection(collectionName)
+                        .where('fecha_hora', '>=', today)
+                        .orderBy('fecha_hora', 'desc')
+                        .limit(50);
+                }
+
+                const snapshot = await query.get();
+                const data = [];
+
+                snapshot.forEach(doc => {
+                    const docData = doc.data();
+                    if (docData.valor !== null && docData.fecha_hora) {
+                        data.push({
+                            valor: docData.valor,
+                            fecha_hora: docData.fecha_hora.toDate ? docData.fecha_hora.toDate() : new Date(docData.fecha_hora)
+                        });
+                    }
+                });
+
+                return data.reverse();
+            } catch (error) {
+                console.error(`Error obteniendo datos de ${collectionName}:`, error);
+                return [];
+            }
+        }
+
+        function createTemperatureChart(data) {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            
+            if (tempChart) {
+                tempChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: values,
+                        borderColor: '#FF6B6B',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#FF6B6B',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createPhChart(data) {
+            const ctx = document.getElementById('phChart').getContext('2d');
+            
+            if (phChart) {
+                phChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            phChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'pH',
+                        data: values,
+                        borderColor: '#4ECDC4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#4ECDC4',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 14,
+                            title: {
+                                display: true,
+                                text: 'pH'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createOxygenChart(data) {
+            const ctx = document.getElementById('oxygenChart').getContext('2d');
+            
+            if (oxygenChart) {
+                oxygenChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            oxygenChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Oxígeno Disuelto (mg/L)',
+                        data: values,
+                        borderColor: '#A8E6CF',
+                        backgroundColor: 'rgba(168, 230, 207, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#A8E6CF',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Oxígeno Disuelto (mg/L)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createAmonioChart(data) {
+            const ctx = document.getElementById('amonioChart').getContext('2d');
+            
+            if (amonioChart) {
+                amonioChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            amonioChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Amonio (mg/L)',
+                        data: values,
+                        borderColor: '#FFA500',
+                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#FFA500',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Amonio (mg/L)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function changeChartPeriod(period) {
+            currentChartPeriod = period;
+            
+            document.querySelectorAll('[id^="btn-"]').forEach(btn => {
+                btn.style.opacity = '0.7';
+            });
+            document.getElementById(`btn-${period}`).style.opacity = '1';
+            
+            await loadAllCharts();
+        }
+    </script>
+</body>
+</html>

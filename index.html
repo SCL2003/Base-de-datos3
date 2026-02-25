@@ -108,6 +108,7 @@
         .ph-icon { background: linear-gradient(45deg, #4ECDC4, #44A08D); }
         .oxygen-icon { background: linear-gradient(45deg, #A8E6CF, #7FDBFF); }
         .amonio-icon { background: linear-gradient(45deg, #FFA500, #FF6347); }
+        .nitrito-icon { background: linear-gradient(45deg, #1CBD17, #7517BD); }
 
         .sensor-title {
             font-size: 1.3em;
@@ -349,7 +350,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 15px;          /* espacio entre switch y texto */
+            gap: 45px;          /* espacio entre switch y texto */
             margin: 20px 0;
             color: white;
         }
@@ -416,36 +417,36 @@
                 🎛️ Control Remoto de Dispositivos
             </div>
             <div class="control-grid">
-                <div class="control-item" id="bomba1-item">
-                    <div class="control-label">Bomba 1</div>
-                    <button class="control-button off" id="bomba1-btn" onclick="toggleDevice('bomba1')">
+                <div class="control-item" id="Electrovalvula1-item">
+                    <div class="control-label">Electrovalvula 1</div>
+                    <button class="control-button off" id="Electrovalvula1-btn" onclick="toggleDevice('Electrovalvula1')">
                         💧
                     </button>
-                    <div class="control-status status-off" id="bomba1-status">APAGADA</div>
+                    <div class="control-status status-off" id="Electrovalvula1-status">APAGADA</div>
                 </div>
 
-                <div class="control-item" id="bomba2-item">
-                    <div class="control-label">Bomba 2</div>
-                    <button class="control-button off" id="bomba2-btn" onclick="toggleDevice('bomba2')">
+                <div class="control-item" id="Electrovalvula2-item">
+                    <div class="control-label">Electrovalvula 2</div>
+                    <button class="control-button off" id="Electrovalvula2-btn" onclick="toggleDevice('Electrovalvula2')">
                         💧
                     </button>
-                    <div class="control-status status-off" id="bomba2-status">APAGADA</div>
+                    <div class="control-status status-off" id="Electrovalvula2-status">APAGADA</div>
                 </div>
 
-                <div class="control-item" id="electrovalvula1-item">
-                    <div class="control-label">Electroválvula 1</div>
-                    <button class="control-button off" id="electrovalvula1-btn" onclick="toggleDevice('electrovalvula1')">
-                        🔧
+                <div class="control-item" id="Electrovalvula3-item">
+                    <div class="control-label">Electroválvula 3</div>
+                    <button class="control-button off" id="Electrovalvula3-btn" onclick="toggleDevice('Electrovalvula3')">
+                        💨
                     </button>
-                    <div class="control-status status-off" id="electrovalvula1-status">CERRADA</div>
+                    <div class="control-status status-off" id="Electrovalvula3-status">CERRADA</div>
                 </div>
 
-                <div class="control-item" id="electrovalvula2-item">
-                    <div class="control-label">Electroválvula 2</div>
-                    <button class="control-button off" id="electrovalvula2-btn" onclick="toggleDevice('electrovalvula2')">
-                        🔧
+                <div class="control-item" id="Electrovalvula4-item">
+                    <div class="control-label">Electroválvula 4</div>
+                    <button class="control-button off" id="Electrovalvula4-btn" onclick="toggleDevice('Electrovalvula4')">
+                        💨
                     </button>
-                    <div class="control-status status-off" id="electrovalvula2-status">CERRADA</div>
+                    <div class="control-status status-off" id="Electrovalvula4-status">CERRADA</div>
                 </div>
             </div>
         </div>
@@ -506,6 +507,21 @@
                     <span id="amonio-time">--</span>
                 </div>
             </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <div class="sensor-icon nitrito-icon">⚗️</div>
+                    <div class="sensor-title">Sensor de Nitrito</div>
+                </div>
+                <div class="sensor-value" id="nitrito-value">
+                    -- <span class="sensor-unit">mg/L</span>
+                </div>
+                <div class="sensor-info">
+                    <span>Última actualización:</span>
+                    <span id="nitrito-time">--</span>
+                </div>
+            </div>
+
         </div>
 
         <div id="charts-section" style="display: none;">
@@ -539,6 +555,12 @@
                 <div class="chart-title">⚗️ Amonio</div>
                 <canvas id="amonioChart" width="400" height="300"></canvas>
             </div>
+
+            <!-- Gráfico de Nitrito -->
+            <div class="chart-container">
+                <div class="chart-title">🧫 Nitrito</div>
+                <canvas id="nitritoChart" width="400" height="300"></canvas>
+            </div>
         </div>
     </div>
 
@@ -564,16 +586,17 @@
         let db;
         let autoRefreshInterval;
         let isAutoRefreshEnabled = false;
-        let tempChart, phChart, oxygenChart, amonioChart;
+        let tempChart, phChart, oxygenChart, amonioChart, nitritoChart;
         let currentChartPeriod = 'last10';
         let currentMode = "auto";
+        let isUpdatingFromFirestore = false;
 
         // Estado de los dispositivos
         let deviceStates = {
-            bomba1: false,
-            bomba2: false,
-            electrovalvula1: false,
-            electrovalvula2: false
+            Electrovalvula1: false,
+            Electrovalvula2: false,
+            Electrovalvula3: false,
+            Electrovalvula4: false
         };
 
         try {
@@ -582,6 +605,8 @@
             console.log("Firebase inicializado correctamente");
             loadData();
             initializeControlStates();
+            initializeSystemMode();
+            setupModeListener();
             setupControlListeners();
         } catch (error) {
             console.error("Error al inicializar Firebase:", error);
@@ -593,11 +618,12 @@
                 showLoading(true);
                 
                 // Cargar datos de cada sensor (incluyendo amonio)
-                const [tempData, phData, oxygenData, amonioData] = await Promise.all([
+                const [tempData, phData, oxygenData, amonioData, nitritoData] = await Promise.all([
                     getLatestSensorData('Sensor de temperatura'),
                     getLatestSensorData('Sensor de ph'),
                     getLatestSensorData('Sensor de oxigeno disuelto'),
-                    getLatestSensorData('Sensor de amonio')
+                    getLatestSensorData('Sensor de amonio'),
+                    getLatestSensorData('Sensor de nitrito')
                 ]);
 
                 // Actualizar la interfaz
@@ -605,6 +631,7 @@
                 updateSensorDisplay('ph', phData, 'pH');
                 updateSensorDisplay('oxygen', oxygenData, 'mg/L');
                 updateSensorDisplay('amonio', amonioData, 'mg/L');
+                updateSensorDisplay('nitrito', nitritoData, 'mg/L');
 
                 showLoading(false);
                 document.getElementById('dashboard').style.display = 'grid';
@@ -623,18 +650,21 @@
 
         // Función de cambio en modo de automatización. Manual o controlado
 
-        function toggleMode() {
+        async function toggleMode() {
+            if (isUpdatingFromFirestore) return; // evita eco del listener
             const switchElement = document.getElementById("modeSwitch");
-            const label = document.getElementById("modeLabel");
+            const newMode = switchElement.checked ? "Control" : "Automatico";
 
-            if (switchElement.checked) {
-                currentMode = "manual";
-                label.textContent = "Modo Manual";
-                console.log("Sistema en modo manual");
-            } else {
-                currentMode = "auto";
-                label.textContent = "Modo Automático";
-                console.log("Sistema en modo automático");
+            try {
+                await db.collection('Modo_control').doc('Estado').update({
+                    modo: newMode,
+                    ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log("Modo guardado en Firestore:", newMode);
+            } catch (error) {
+                console.error("Error al cambiar modo:", error);
+                // Revertir el switch si falla la escritura
+                switchElement.checked = !switchElement.checked;
             }
         }
 
@@ -643,7 +673,7 @@
             try {
                 const controlRef = db.collection('control_dispositivos');
                 
-                const devices = ['bomba1', 'bomba2', 'electrovalvula1', 'electrovalvula2'];
+                const devices = ['Electrovalvula1', 'Electrovalvula2', 'Electrovalvula3', 'Electrovalvula4'];
                 
                 for (const device of devices) {
                     try {
@@ -701,9 +731,47 @@
             }
         }
 
+        // Inicialización de modo de control
+
+        async function initializeSystemMode() {
+            const modeRef = db.collection('Modo_control').doc('Estado');
+            
+            const doc = await modeRef.get();
+
+            if (!doc.exists) {
+                await modeRef.set({
+                    modo: "Automatico",
+                    ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                setModeUI("Automatico");
+            } else {
+                const data = doc.data();
+                const currentMode = data.modo || "Automatico";
+                setModeUI(currentMode);
+            }
+        }
+
+        // Configuración de listener para elección de control
+
+        function setupModeListener() {
+            db.collection('Modo_control').doc('Estado')
+                .onSnapshot((doc) => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        const newMode = data.modo || "Automatico";
+                        isUpdatingFromFirestore = true;
+                        setModeUI(newMode);
+                        isUpdatingFromFirestore = false;
+                        console.log("Modo actualizado por listener:", newMode);
+                    }
+                }, (error) => {
+                    console.error("Error escuchando modo:", error);
+                });
+        }
+
         // Configurar listeners para cambios en tiempo real
         function setupControlListeners() {
-            const devices = ['bomba1', 'bomba2', 'electrovalvula1', 'electrovalvula2'];
+            const devices = ['Electrovalvula1', 'Electrovalvula2', 'Electrovalvula3', 'Electrovalvula4'];
             
             devices.forEach(device => {
                 db.collection('control_dispositivos').doc(device)
@@ -762,7 +830,7 @@
                     status.classList.add('status-on');
                     item.classList.add('active');
                     
-                    if (deviceName.includes('bomba')) {
+                    if (deviceName.includes('Electrovalvula')) {
                         status.textContent = 'ENCENDIDA';
                     } else {
                         status.textContent = 'ABIERTA';
@@ -772,7 +840,7 @@
                     status.classList.add('status-off');
                     item.classList.add('inactive');
                     
-                    if (deviceName.includes('bomba')) {
+                    if (deviceName.includes('Electrovalvula')) {
                         status.textContent = 'APAGADA';
                     } else {
                         status.textContent = 'CERRADA';
@@ -788,10 +856,10 @@
         // Obtener nombre para mostrar del dispositivo
         function getDeviceDisplayName(deviceName) {
             const names = {
-                'bomba1': 'Bomba 1',
-                'bomba2': 'Bomba 2',
-                'electrovalvula1': 'Electroválvula 1',
-                'electrovalvula2': 'Electroválvula 2'
+                'Electrovalvula1': 'Electrovalvula 1',
+                'Electrovalvula2': 'Electrovalvula 2',
+                'Electrovalvula3': 'Electroválvula 3',
+                'Electrovalvula4': 'Electroválvula 4'
             };
             return names[deviceName] || deviceName;
         }
@@ -884,7 +952,7 @@
 
         // Configurar listeners para actualizaciones en tiempo real
         function setupRealtimeListeners() {
-            const collections = ['Sensor de temperatura', 'Sensor de ph', 'Sensor de oxigeno disuelto', 'Sensor de amonio'];
+            const collections = ['Sensor de temperatura', 'Sensor de ph', 'Sensor de oxigeno disuelto', 'Sensor de amonio', 'Sensor de nitrito'];
             
             collections.forEach(collection => {
                 db.collection(collection)
@@ -903,17 +971,19 @@
         // Funciones para los gráficos individuales
         async function loadAllCharts() {
             try {
-                const [tempData, phData, oxygenData, amonioData] = await Promise.all([
+                const [tempData, phData, oxygenData, amonioData, nitritoData] = await Promise.all([
                     getHistoricalData('Sensor de temperatura'),
                     getHistoricalData('Sensor de ph'),
                     getHistoricalData('Sensor de oxigeno disuelto'),
-                    getHistoricalData('Sensor de amonio')
+                    getHistoricalData('Sensor de amonio'),
+                    getHistoricalData('Sensor de nitrito')
                 ]);
 
                 createTemperatureChart(tempData);
                 createPhChart(phData);
                 createOxygenChart(oxygenData);
                 createAmonioChart(amonioData);
+                createNitritoChart(nitritoData);
             } catch (error) {
                 console.error("Error cargando gráficos:", error);
             }
@@ -1235,6 +1305,156 @@
             });
         }
 
+        function createOxygenChart(data) {
+            const ctx = document.getElementById('oxygenChart').getContext('2d');
+            
+            if (oxygenChart) {
+                oxygenChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            oxygenChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Oxígeno Disuelto (mg/L)',
+                        data: values,
+                        borderColor: '#A8E6CF',
+                        backgroundColor: 'rgba(168, 230, 207, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#A8E6CF',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Oxígeno Disuelto (mg/L)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createNitritoChart(data) {
+            const ctx = document.getElementById('nitritoChart').getContext('2d');
+            
+            if (nitritoChart) {
+                nitritoChart.destroy();
+            }
+
+            const labels = data.map(item => {
+                const date = item.fecha_hora;
+                return currentChartPeriod === 'today' 
+                    ? date.toLocaleTimeString().slice(0, 5)
+                    : date.toLocaleTimeString();
+            });
+
+            const values = data.map(item => item.valor);
+
+            nitritoChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Nitrito (mg/L)',
+                        data: values,
+                        borderColor: '#FFA500',
+                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#FFA500',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Nitrito (mg/L)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tiempo'
+                            },
+                            ticks: {
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+
+        function setModeUI(mode) {
+            const switchElement = document.getElementById("modeSwitch");
+            const label = document.getElementById("modeLabel");
+
+            if (mode === "Control") {
+                switchElement.checked = true;
+                label.textContent = "Modo Manual";
+            } else {
+                switchElement.checked = false;
+                label.textContent = "Modo Automático";
+            }
+        }
+
         async function changeChartPeriod(period) {
             currentChartPeriod = period;
             
@@ -1245,6 +1465,8 @@
             
             await loadAllCharts();
         }
+
+
     </script>
 </body>
 </html>

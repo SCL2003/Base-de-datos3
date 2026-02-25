@@ -310,6 +310,47 @@
             text-align: center;
         }
 
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            display: none;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            background-color: #ccc;
+            border-radius: 34px;
+            width: 100%;
+            height: 100%;
+            transition: 0.4s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            border-radius: 50%;
+            transition: 0.4s;
+        }
+
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -351,6 +392,14 @@
 
         <div id="error" class="error" style="display: none;"></div>
         <div id="success" class="success" style="display: none;"></div>
+
+        <div class="mode-control">
+            <label class="switch">
+                <input type="checkbox" id="modeSwitch" onchange="toggleMode()">
+                <span class="slider"></span>
+            </label>
+            <span id="modeLabel">Modo Automático</span>
+        </div>
 
         <!-- Sección de Control Remoto -->
         <div id="control-section" class="control-section" style="display: none;">
@@ -508,6 +557,7 @@
         let isAutoRefreshEnabled = false;
         let tempChart, phChart, oxygenChart, amonioChart;
         let currentChartPeriod = 'last10';
+        let currentMode = "auto";
 
         // Estado de los dispositivos
         let deviceStates = {
@@ -559,6 +609,23 @@
                 console.error("Error cargando datos:", error);
                 showError("Error al cargar los datos. Verifica tu conexión.");
                 showLoading(false);
+            }
+        }
+
+        // Función de cambio en modo de automatización. Manual o controlado
+
+        function toggleMode() {
+            const switchElement = document.getElementById("modeSwitch");
+            const label = document.getElementById("modeLabel");
+
+            if (switchElement.checked) {
+                currentMode = "manual";
+                label.textContent = "Modo Manual";
+                console.log("Sistema en modo manual");
+            } else {
+                currentMode = "auto";
+                label.textContent = "Modo Automático";
+                console.log("Sistema en modo automático");
             }
         }
 

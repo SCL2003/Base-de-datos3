@@ -451,6 +451,49 @@
             </div>
         </div>
 
+         <!-- Sección de Límites de Control Automático -->
+        <div id="limites-section" class="control-section" style="display: none;">
+            <div class="control-title">⚙️ Límites de Control Automático</div>
+            <div class="control-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+
+                <div class="control-item">
+                    <div class="control-label">Amonio — Umbral Bajo (mg/L)</div>
+                    <input type="number" id="input-amonio-bajo" step="0.01" min="0"
+                           style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;
+                                  font-size:1.1em;text-align:center;margin-top:10px;">
+                    <div style="color:#888;font-size:0.8em;margin-top:5px;">Actual: <span id="lbl-amonio-bajo">--</span></div>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">Amonio — Umbral Alto (mg/L)</div>
+                    <input type="number" id="input-amonio-alto" step="0.01" min="0"
+                           style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;
+                                  font-size:1.1em;text-align:center;margin-top:10px;">
+                    <div style="color:#888;font-size:0.8em;margin-top:5px;">Actual: <span id="lbl-amonio-alto">--</span></div>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">Oxígeno — Umbral Medio (%DO)</div>
+                    <input type="number" id="input-oxigeno-medio" step="0.1" min="0" max="100"
+                           style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;
+                                  font-size:1.1em;text-align:center;margin-top:10px;">
+                    <div style="color:#888;font-size:0.8em;margin-top:5px;">Actual: <span id="lbl-oxigeno-medio">--</span></div>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">Oxígeno — Umbral Alto (%DO)</div>
+                    <input type="number" id="input-oxigeno-alto" step="0.1" min="0" max="100"
+                           style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;
+                                  font-size:1.1em;text-align:center;margin-top:10px;">
+                    <div style="color:#888;font-size:0.8em;margin-top:5px;">Actual: <span id="lbl-oxigeno-alto">--</span></div>
+                </div>
+
+            </div>
+            <div style="text-align:center; margin-top:20px;">
+                <button class="btn" onclick="guardarLimites()">💾 Guardar Límites en Firebase</button>
+            </div>
+        </div>
+
         <div id="dashboard" class="dashboard" style="display: none;">
             <div class="sensor-card">
                 <div class="sensor-header">
@@ -606,6 +649,7 @@
             loadData();
             initializeControlStates();
             initializeSystemMode();
+            initializeLimites();
             setupModeListener();
             setupControlListeners();
         } catch (error) {
@@ -1466,6 +1510,80 @@
             await loadAllCharts();
         }
 
+        // ── LÍMITES DE CONTROL AUTOMÁTICO ──────────────────────
+
+        async function initializeLimites() {
+            try {
+                const docRef = db.collection('limites_control').doc('umbrales');
+                const doc = await docRef.get();
+
+                if (!doc.exists) {
+                    // Crear con valores por defecto si no existe
+                    await docRef.set({
+                        amonio_bajo:    0.1,
+                        amonio_alto:    0.4,
+                        oxigeno_medio:  85.0,
+                        oxigeno_alto:   95.0,
+                        ultimo_cambio:  firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                const data = (await docRef.get()).data();
+                renderLimitesActuales(data);
+                document.getElementById('limites-section').style.display = 'block';
+            } catch (e) {
+                console.error('Error cargando límites:', e);
+            }
+        }
+
+        function renderLimitesActuales(data) {
+            document.getElementById('lbl-amonio-bajo').textContent    = data.amonio_bajo    ?? '--';
+            document.getElementById('lbl-amonio-alto').textContent    = data.amonio_alto    ?? '--';
+            document.getElementById('lbl-oxigeno-medio').textContent  = data.oxigeno_medio  ?? '--';
+            document.getElementById('lbl-oxigeno-alto').textContent   = data.oxigeno_alto   ?? '--';
+
+            // Pre-rellenar los inputs con los valores actuales
+            document.getElementById('input-amonio-bajo').value    = data.amonio_bajo    ?? '';
+            document.getElementById('input-amonio-alto').value    = data.amonio_alto    ?? '';
+            document.getElementById('input-oxigeno-medio').value  = data.oxigeno_medio  ?? '';
+            document.getElementById('input-oxigeno-alto').value   = data.oxigeno_alto   ?? '';
+        }
+
+        async function guardarLimites() {
+            const ab = parseFloat(document.getElementById('input-amonio-bajo').value);
+            const aa = parseFloat(document.getElementById('input-amonio-alto').value);
+            const om = parseFloat(document.getElementById('input-oxigeno-medio').value);
+            const oa = parseFloat(document.getElementById('input-oxigeno-alto').value);
+
+            // Validaciones básicas
+            if ([ab, aa, om, oa].some(isNaN)) {
+                showError('Por favor ingresa valores numéricos en todos los campos.');
+                return;
+            }
+            if (ab >= aa) {
+                showError('El umbral bajo de amonio debe ser menor que el umbral alto.');
+                return;
+            }
+            if (om >= oa) {
+                showError('El umbral medio de oxígeno debe ser menor que el umbral alto.');
+                return;
+            }
+
+            try {
+                await db.collection('limites_control').doc('umbrales').set({
+                    amonio_bajo:   ab,
+                    amonio_alto:   aa,
+                    oxigeno_medio: om,
+                    oxigeno_alto:  oa,
+                    ultimo_cambio: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showSuccess('✅ Límites guardados. La ESP32 los recibirá en segundos.');
+                renderLimitesActuales({ amonio_bajo: ab, amonio_alto: aa,
+                                        oxigeno_medio: om, oxigeno_alto: oa });
+            } catch (e) {
+                console.error('Error guardando límites:', e);
+                showError('Error al guardar los límites en Firebase.');
+            }
+        }
 
     </script>
 </body>
